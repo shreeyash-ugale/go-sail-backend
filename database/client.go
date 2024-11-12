@@ -34,5 +34,6 @@ func Connect(connectionString string) {
 	Client = client
 	UserCollection = client.Database("go-sail-auth").Collection("users")
 	PlanCollection = client.Database("go-sail-auth").Collection("plans")
+	APIKeyCollection = client.Database("go-sail-auth").Collection("apikeys")
 	log.Println("Connected to Database!")
 }

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/shreeyash-ugale/go-sail-server/database"
@@ -12,11 +13,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 func Signup(c *gin.Context) {
 	var user models.User
-	if c.ContentType() != "application/json" {
+	if c.Request.Header.Get("Content-Type") != "application/json" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Request content type must be application/json"})
 		return
 	}
@@ -79,41 +81,35 @@ func Signup(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "User registered successfully"})
 }
 
+type UpgradeReq struct {
+	Email    string `json:"email"`
+	Key      string `json:"key"`
+	PlanName string `json:"plan"`
+}
+
 func UpgradePlan(c *gin.Context) {
-	if c.ContentType() != "application/json" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Request content type must be application/json"})
-		return
-	}
+	/*
+		if c.ContentType() != "application/json" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Request content type must be application/json"})
+			return
+		}*/
 
-	var reqBody struct {
-		Email    string `json:"email"`
-		PlanName string `json:"plan_name"`
-		Master   string `json:"master"`
-	}
-	if reqBody.Master != "9999" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "You are not authorized to upgrade plan"})
-		return
-	}
-
-	if err := c.ShouldBindJSON(&reqBody); err != nil {
+	var reqBody UpgradeReq
+	if err := c.ShouldBindBodyWith(&reqBody, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
-	}
-
-	var user models.User
-	err := database.UserCollection.FindOne(context.TODO(), bson.M{"email": reqBody.Email}).Decode(&user)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "User not found"})
+	} /*
+		if reqBody.Master != "9999" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "You are not authorized to upgrade plan"})
 			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+		}*/
+	fmt.Println("User:", reqBody.Email)
+
+	user := c.MustGet("user").(models.User)
 
 	// Find the new plan by name
 	var newPlan models.Plan
-	err = database.PlanCollection.FindOne(context.TODO(), bson.M{"name": reqBody.PlanName}).Decode(&newPlan)
+	err := database.PlanCollection.FindOne(context.TODO(), bson.M{"name": reqBody.PlanName}).Decode(&newPlan)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Plan not found"})
@@ -124,7 +120,6 @@ func UpgradePlan(c *gin.Context) {
 	}
 
 	// Update the user's plan
-	user.PlanID = newPlan.ID
 	_, err = database.UserCollection.UpdateOne(context.TODO(), bson.M{"_id": user.ID}, bson.M{"$set": bson.M{"plan_id": newPlan.ID}})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -135,6 +130,12 @@ func UpgradePlan(c *gin.Context) {
 	newPlan.Users = append(newPlan.Users, user.ID)
 	_, err = database.PlanCollection.UpdateOne(context.TODO(), bson.M{"_id": newPlan.ID}, bson.M{"$set": bson.M{"users": newPlan.Users}})
 	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	var apikey models.APIKey
+	if err := database.APIKeyCollection.FindOne(context.TODO(), bson.M{"key": reqBody.Key}).Decode(&apikey); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

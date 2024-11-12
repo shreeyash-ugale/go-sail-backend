@@ -22,16 +22,18 @@ func main() {
 
 func initRouter() *gin.Engine {
 	router := gin.Default()
-	api := router.Group("/api")
+	apipass := router.Group("/user").Use(middlewares.UserAuth())
 	{
-		api.POST("/token", controllers.GenerateToken)
-		secured := api.Group("/secured").Use(middlewares.Auth())
-		{
-			secured.GET("/ping", controllers.Ping)
-		}
-		api.POST("/signup", controllers.Signup)
-		api.POST("/upgrade", controllers.UpgradePlan)
+		apipass.POST("/token", controllers.GenerateAPIKey)
+		apipass.GET("/token", controllers.GetAPIKeys)
+		apipass.DELETE("/token", controllers.RevokeAPIKey)
 	}
+	apiwkey := router.Group("/api").Use(middlewares.IsAPIOwner())
+	{
+		apiwkey.GET("/secured/eval", middlewares.IsAuthorized(), controllers.Ping)
+		apiwkey.POST("/upgrade", controllers.UpgradePlan)
+	}
+	router.POST("/api/signup", controllers.Signup)
 	return router
 }
 
